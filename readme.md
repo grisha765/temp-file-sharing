@@ -44,7 +44,9 @@ npm install
     ghcr.io/grisha765/temp-file-sharing:latest
     ```
 
-#### Proxy on nginx
+### Proxy on nginx
+
+#### Routing Based on Hostname
 
 - Create a file /etc/nginx/sites-enabled/example.com with the lines:
     ```nginx
@@ -53,6 +55,25 @@ npm install
         server_name example.com;
      
         location / {
+            proxy_pass http://127.0.0.1:3000/;
+            proxy_set_header Host $http_host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+    ```
+
+### Routing Based on URL Path
+
+- Create a file /etc/nginx/sites-enabled/example.com with the lines:
+    ```nginx
+    server {
+        listen 80 default;
+        server_name example.com;
+     
+        location /shared/ {
+            proxy_set_header X-Forwarded-Prefix /shared;
             proxy_pass http://127.0.0.1:3000/;
             proxy_set_header Host $http_host;
             proxy_set_header X-Real-IP $remote_addr;
