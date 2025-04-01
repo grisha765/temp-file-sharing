@@ -10,7 +10,7 @@ app.set('trust proxy', true);
 
 const PORT = process.env.PORT || 3000;
 
-const UPLOAD_FOLDER = '/tmp/dropmefiles';
+const UPLOAD_FOLDER = '/tmp/temp-files';
 if (!fs.existsSync(UPLOAD_FOLDER)) {
   fs.mkdirSync(UPLOAD_FOLDER, { recursive: true });
 }
