@@ -98,7 +98,7 @@ window.addEventListener('DOMContentLoaded', () => {
       fileLinkDiv.style.color = 'green';
       fileLinkDiv.innerHTML = `
         File <strong>${data.originalName}</strong> uploaded successfully.<br>
-        File link (valid for 30 mins): <a href="${data.fileLink}" target="_blank">${data.fileLink}</a>
+        File link (valid for ${data.retentionMinutes} mins): <a href="${data.fileLink}" target="_blank">${data.fileLink}</a>
       `;
     } catch (error) {
       console.error('Error uploading file:', error);
