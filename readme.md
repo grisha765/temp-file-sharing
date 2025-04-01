@@ -38,7 +38,7 @@ npm install
 - Deploy in container
     ```bash
     podman run --tmpfs /tmp -d \
-    --name check-host \
+    --name temp-file-sharing \
     -p 3000:3000 \
     -e PORT="3000" \
     ghcr.io/grisha765/temp-file-sharing:latest
