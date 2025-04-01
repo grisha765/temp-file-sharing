@@ -100,7 +100,8 @@ app.post('/upload', (req, res) => {
     );
 
     const host = process.env.PUBLIC_DOMAIN || req.get('host');
-    const fileLink = `${req.protocol}://${host}/file/${fileId}`;
+    const prefix = req.get('X-Forwarded-Prefix') || '';
+    const fileLink = `${req.protocol}://${host}${prefix}/file/${fileId}`;
     res.json({ fileLink, originalName });
   });
 });
