@@ -78,7 +78,9 @@ app.post('/upload', (req, res) => {
     if (err) {
       if (err.code === 'LIMIT_FILE_SIZE') {
         console.error(`[${new Date().toISOString()}] Upload error: File exceeds ${fileSizeLimitMb} MB limit.`);
-        return res.status(413).json({ error: `Uploaded file exceeds the allowed file size of ${fileSizeLimitMb} MB.` });
+        return res.status(413).json({
+          error: `Uploaded file exceeds the allowed file size of ${fileSizeLimitMb} MB.`
+        });
       }
       console.error(`[${new Date().toISOString()}] Upload error:`, err);
       return res.status(500).json({ error: 'An error occurred during file upload.' });
@@ -87,12 +89,17 @@ app.post('/upload', (req, res) => {
     const fileId = uuidv4();
     const filePath = req.file.path;
     const originalName = req.file.originalname;
+    const mimeType = req.file.mimetype;
 
     const deleteTimeout = setTimeout(() => {
       cleanupFile(fileId);
     }, retentionTime);
 
-    fileStore[fileId] = { path: filePath, timeoutHandle: deleteTimeout };
+    fileStore[fileId] = {
+      path: filePath,
+      timeoutHandle: deleteTimeout,
+      mimeType
+    };
 
     console.log(
       `[${new Date().toISOString()}] File uploaded: ${originalName} (ID: ${fileId}), stored at ${filePath}. ` +
@@ -102,7 +109,18 @@ app.post('/upload', (req, res) => {
     const host = process.env.PUBLIC_DOMAIN || req.get('host');
     const prefix = req.get('X-Forwarded-Prefix') || '';
     const fileLink = `${req.protocol}://${host}${prefix}/file/${fileId}`;
-    res.json({ fileLink, originalName, retentionMinutes });
+
+    const isTextFile = mimeType.startsWith('text/');
+    const textViewLink = isTextFile
+      ? `${req.protocol}://${host}${prefix}/text/${fileId}`
+      : null;
+
+    res.json({
+      fileLink,
+      originalName,
+      retentionMinutes,
+      ...(textViewLink ? { textViewLink } : {})
+    });
   });
 });
 
@@ -116,6 +134,28 @@ app.get('/file/:id', (req, res) => {
     if (err) {
       console.error('Error sending file:', err);
     }
+  });
+});
+
+app.get('/text/:id', (req, res) => {
+  const { id } = req.params;
+  const fileRecord = fileStore[id];
+
+  if (!fileRecord) {
+    return res.status(404).send('File not found or it may have expired.');
+  }
+
+  if (!fileRecord.mimeType || !fileRecord.mimeType.startsWith('text/')) {
+    return res.status(415).send('Not a text file or viewing as text is not supported.');
+  }
+
+  fs.readFile(fileRecord.path, 'utf8', (err, data) => {
+    if (err) {
+      console.error('Error reading file:', err);
+      return res.status(500).send('Error reading file.');
+    }
+    res.type('text/plain');
+    res.send(data);
   });
 });
 

@@ -74,56 +74,59 @@ window.addEventListener('DOMContentLoaded', () => {
   async function uploadFile(file) {
     const formData = new FormData();
     formData.append('file', file);
-    
+
     try {
       const response = await fetch('upload', {
         method: 'POST',
         body: formData
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || `Upload failed with status ${response.status}`);
       }
-      
+
       const data = await response.json();
       uploadCompleted = true;
-      
+
       const dropZone = document.getElementById('drop-zone');
       if (dropZone) {
         dropZone.remove();
       }
-      
+
       fileLinkDiv.classList.remove('hidden');
       fileLinkDiv.style.color = 'green';
+      
       fileLinkDiv.innerHTML = `
         File <strong>${data.originalName}</strong> uploaded successfully.<br>
-        File link (valid for ${data.retentionMinutes} mins): <a id="fileLinkAnchor" href="${data.fileLink}" target="_blank">${data.fileLink}</a>
+        File link (valid for ${data.retentionMinutes} mins): 
+        <a id="fileLinkAnchor" href="${data.fileLink}" target="_blank">${data.fileLink}</a>
         <button id="copyButton" data-target="fileLinkAnchor">Copy Link</button>
       `;
+
+      if (data.textViewLink) {
+        fileLinkDiv.innerHTML += `
+          <br>
+          Quick View link:
+          <a id="textViewLinkAnchor" href="${data.textViewLink}" target="_blank">${data.textViewLink}</a>
+          <button id="copyQuickViewButton" data-target="textViewLinkAnchor">Copy Quick View Link</button>
+        `;
+      }
 
       const copyButton = document.getElementById("copyButton");
       copyButton.addEventListener("click", () => {
         const targetId = copyButton.getAttribute("data-target");
-        const targetElement = document.getElementById(targetId);
-
-        if (targetElement) {
-          const textToCopy = targetElement.textContent;
-          if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(textToCopy)
-              .then(() => {
-                showCopySuccess(copyButton);
-              })
-              .catch(err => {
-                console.error("Failed to copy using Clipboard API:", err);
-                fallbackCopyToClipboard(textToCopy, copyButton);
-              });
-          } else {
-            fallbackCopyToClipboard(textToCopy, copyButton);
-          }
-        }
+        copyToClipboardById(targetId, copyButton);
       });
-      
+
+      const copyQuickViewButton = document.getElementById("copyQuickViewButton");
+      if (copyQuickViewButton) {
+        copyQuickViewButton.addEventListener("click", () => {
+          const targetId = copyQuickViewButton.getAttribute("data-target");
+          copyToClipboardById(targetId, copyQuickViewButton);
+        });
+      }
+
     } catch (error) {
       console.error('Error uploading file:', error);
       fileLinkDiv.classList.remove('hidden');
@@ -132,9 +135,29 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function copyToClipboardById(elementId, button) {
+    const targetElement = document.getElementById(elementId);
+    if (!targetElement) return;
+
+    const textToCopy = targetElement.textContent;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(textToCopy)
+        .then(() => {
+          showCopySuccess(button);
+        })
+        .catch(err => {
+          console.error("Failed to copy using Clipboard API:", err);
+          fallbackCopyToClipboard(textToCopy, button);
+        });
+    } else {
+      fallbackCopyToClipboard(textToCopy, button);
+    }
+  }
+
   function showCopySuccess(button) {
+    const originalText = button.textContent;
     button.textContent = "Copied!";
-    setTimeout(() => button.textContent = "Copy Link", 2000);
+    setTimeout(() => (button.textContent = originalText), 2000);
   }
 
   function fallbackCopyToClipboard(text, button) {
@@ -152,12 +175,12 @@ window.addEventListener('DOMContentLoaded', () => {
       } else {
         console.error("Fallback: Copy command was unsuccessful");
         button.textContent = "Error!";
-        setTimeout(() => button.textContent = "Copy Link", 2000);
+        setTimeout(() => (button.textContent = "Copy Link"), 2000);
       }
     } catch (err) {
       console.error("Fallback: Unable to copy", err);
       button.textContent = "Error!";
-      setTimeout(() => button.textContent = "Copy Link", 2000);
+      setTimeout(() => (button.textContent = "Copy Link"), 2000);
     }
 
     document.body.removeChild(textarea);
