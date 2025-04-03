@@ -36,7 +36,7 @@ jobs:
       - name: Build Container image
         uses: redhat-actions/buildah-build@v2
         with:
-          image: ${{ steps.get_tag.outputs.tag }}
+          image-with-tag: ${{ steps.get_tag.outputs.tag }}
           containerfiles: ./dockerfile
 
       - name: Push image to GHCR
