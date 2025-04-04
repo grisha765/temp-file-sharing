@@ -15,6 +15,7 @@ window.addEventListener('DOMContentLoaded', () => {
   let uploadCompleted = false;
   let currentXhr      = null;
   let MAX_FILE_SIZE_MB= 10;
+  let isUploading     = false;
 
   function fetchConfig() {
     fetch('config')
@@ -30,7 +31,6 @@ window.addEventListener('DOMContentLoaded', () => {
     e.preventDefault();
     e.stopPropagation();
   }
-
   ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
     dropZone.addEventListener(eventName, preventDefaults, false);
     document.body.addEventListener(eventName, preventDefaults, false);
@@ -39,68 +39,76 @@ window.addEventListener('DOMContentLoaded', () => {
   function highlight(zone) {
     zone.classList.add('highlight');
   }
-
   function unhighlight(zone) {
     zone.classList.remove('highlight');
   }
 
   dropZone.addEventListener('dragenter', () => {
-    if (!uploadCompleted) highlight(dropZone);
+    if (!isUploading && !uploadCompleted) highlight(dropZone);
   });
   dropZone.addEventListener('dragover', () => {
-    if (!uploadCompleted) highlight(dropZone);
+    if (!isUploading && !uploadCompleted) highlight(dropZone);
   });
   dropZone.addEventListener('dragleave', () => {
-    if (!uploadCompleted) unhighlight(dropZone);
+    if (!isUploading && !uploadCompleted) unhighlight(dropZone);
   });
 
   dropZone.addEventListener('drop', (e) => {
-    if (uploadCompleted) return;
-    unhighlight(dropZone);
-    const dt = e.dataTransfer;
-    const files = dt.files;
-    if (files && files.length > 0) {
-      uploadFile(files[0]);
+    if (!isUploading && !uploadCompleted) {
+      unhighlight(dropZone);
+      const dt = e.dataTransfer;
+      const files = dt.files;
+      if (files && files.length > 0) {
+        uploadFile(files[0]);
+      }
     }
   });
 
   dropZone.addEventListener('click', () => {
-    if (!uploadCompleted) fileInput.click();
+    if (!isUploading && !uploadCompleted) {
+      fileInput.click();
+    }
   });
 
   fileInput.addEventListener('change', () => {
-    if (uploadCompleted) return;
-    if (fileInput.files && fileInput.files.length > 0) {
-      uploadFile(fileInput.files[0]);
+    if (!isUploading && !uploadCompleted) {
+      if (fileInput.files && fileInput.files.length > 0) {
+        uploadFile(fileInput.files[0]);
+      }
     }
   });
 
   window.addEventListener('paste', (e) => {
-    if (uploadCompleted) return;
-    const items = e.clipboardData.items;
-    if (!items) return;
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      if (item.kind === 'file') {
-        const file = item.getAsFile();
-        if (file) {
-          uploadFile(file);
+    if (!isUploading && !uploadCompleted) {
+      const items = e.clipboardData.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.kind === 'file') {
+          const file = item.getAsFile();
+          if (file) {
+            uploadFile(file);
+            break;
+          }
+        } else if (item.kind === 'string') {
+          item.getAsString((pastedText) => {
+            if (pastedText) {
+              const textBlob = new Blob([pastedText], { type: 'text/plain' });
+              const file = new File([textBlob], 'pasted_text.txt', { type: 'text/plain' });
+              uploadFile(file);
+            }
+          });
           break;
         }
-      } else if (item.kind === 'string') {
-        item.getAsString((pastedText) => {
-          if (pastedText) {
-            const textBlob = new Blob([pastedText], { type: 'text/plain' });
-            const file = new File([textBlob], 'pasted_text.txt', { type: 'text/plain' });
-            uploadFile(file);
-          }
-        });
-        break;
       }
     }
   });
 
   function uploadFile(file) {
+    isUploading = true;
+    dropZone.classList.add('disabled'); 
+    fileInput.disabled = true;
+
     errorCard.classList.add('hidden');
     errorMessageDiv.textContent = '';
 
@@ -168,12 +176,10 @@ window.addEventListener('DOMContentLoaded', () => {
 
   function handleUploadSuccess(data) {
     uploadCompleted = true;
-
     uploadCard.classList.add('hidden');
     progressContainer.classList.add('hidden');
 
     fileLinkCard.classList.remove('hidden');
-
     fileLinkDiv.innerHTML = `
       <h2>Upload Successful</h2>
       <p>File <strong>${data.originalName}</strong> uploaded successfully.</p>
@@ -182,7 +188,6 @@ window.addEventListener('DOMContentLoaded', () => {
         <button id="copyButton" class="btn" data-target="fileLinkAnchor">Copy Link</button>
       </p>
     `;
-
     if (data.textViewLink) {
       fileLinkDiv.innerHTML += `
         <p>
@@ -210,11 +215,15 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function showError(message, isCancel = false) {
+  function showError(message) {
     progressContainer.classList.add('hidden');
 
     errorCard.classList.remove('hidden');
     errorMessageDiv.textContent = message;
+
+    isUploading = false;
+    dropZone.classList.remove('disabled');
+    fileInput.disabled = false;
   }
 
   function copyToClipboardById(elementId, button) {
