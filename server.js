@@ -21,6 +21,8 @@ const uploadLimit = process.env.UPLOAD_LIMIT ? parseInt(process.env.UPLOAD_LIMIT
 const uploadWindow = 5 * 60 * 1000;
 const blockDuration = 5 * 60 * 1000;
 
+const fileSizeLimitMb = process.env.FILE_SIZE_LIMIT ? parseInt(process.env.FILE_SIZE_LIMIT, 10) : 10;
+
 function checkAndUpdateUploadTracker(ip) {
   const now = Date.now();
   let tracker = uploadTracker[ip];
@@ -56,6 +58,10 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 const fileStore = {};
+
+app.get('/config', (req, res) => {
+  res.json({ maxFileSizeMb: fileSizeLimitMb });
+});
 
 app.post('/upload', (req, res) => {
   const ip = req.headers['x-real-ip'] || req.ip;
@@ -141,21 +147,20 @@ function cleanupFile(fileId) {
 
 app.use(express.static(path.join(__dirname, 'public')));
 const serverInstance = app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
-  console.log(`File retention time: ${retentionMinutes} minute(s), Upload limit: ${uploadLimit} per 5 minutes.`);
+  console.log(`Server running on http://localhost:${PORT}`);
 });
 
 async function cleanupFolder() {
   try {
     await fsExtra.remove(UPLOAD_FOLDER);
-    console.log(`Cleaned up temporary folder: ${UPLOAD_FOLDER}`);
+    console.log(`Cleaned up folder: ${UPLOAD_FOLDER}`);
   } catch (error) {
-    console.error(`Error cleaning up temporary folder ${UPLOAD_FOLDER}:`, error);
+    console.error(`Error cleaning up folder ${UPLOAD_FOLDER}:`, error);
   }
 }
 
 function shutdown() {
-  console.log('Terminating server, cleaning up temporary files...');
+  console.log('Terminating server...');
   serverInstance.close(async () => {
     await cleanupFolder();
     process.exit(0);

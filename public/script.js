@@ -5,9 +5,20 @@ window.addEventListener('DOMContentLoaded', () => {
   const progressContainer = document.getElementById('progress-container');
   const uploadProgress = document.getElementById('uploadProgress');
   const cancelButton = document.getElementById('cancelButton');
-  const MAX_FILE_SIZE_MB = 10;
   let uploadCompleted = false;
   let currentXhr = null;
+  let MAX_FILE_SIZE_MB = 10;
+
+  function fetchConfig() {
+    fetch('/config')
+      .then(res => res.json())
+      .then(data => {
+        MAX_FILE_SIZE_MB = data.maxFileSizeMb;
+      })
+      .catch(() => {});
+  }
+
+  fetchConfig();
 
   function preventDefaults(e) {
     e.preventDefault();
@@ -27,9 +38,15 @@ window.addEventListener('DOMContentLoaded', () => {
     zone.classList.remove('highlight');
   }
 
-  dropZone.addEventListener('dragenter', () => { if (!uploadCompleted) highlight(dropZone); });
-  dropZone.addEventListener('dragover', () => { if (!uploadCompleted) highlight(dropZone); });
-  dropZone.addEventListener('dragleave', () => { if (!uploadCompleted) unhighlight(dropZone); });
+  dropZone.addEventListener('dragenter', () => {
+    if (!uploadCompleted) highlight(dropZone);
+  });
+  dropZone.addEventListener('dragover', () => {
+    if (!uploadCompleted) highlight(dropZone);
+  });
+  dropZone.addEventListener('dragleave', () => {
+    if (!uploadCompleted) unhighlight(dropZone);
+  });
   dropZone.addEventListener('drop', (e) => {
     if (uploadCompleted) return;
     unhighlight(dropZone);
@@ -64,7 +81,7 @@ window.addEventListener('DOMContentLoaded', () => {
           break;
         }
       } else if (item.kind === 'string') {
-        item.getAsString(async (pastedText) => {
+        item.getAsString((pastedText) => {
           if (pastedText) {
             const textBlob = new Blob([pastedText], { type: 'text/plain' });
             const file = new File([textBlob], 'pasted_text.txt', { type: 'text/plain' });
@@ -96,13 +113,13 @@ window.addEventListener('DOMContentLoaded', () => {
         uploadProgress.textContent = `${Math.floor(percentComplete)}%`;
       }
     };
-    xhr.onload = async () => {
+    xhr.onload = () => {
       if (xhr.status === 200) {
         try {
           const data = JSON.parse(xhr.responseText);
           handleUploadSuccess(data);
         } catch {
-          showError('Upload completed, but server response invalid.');
+          showError('Upload completed, but response invalid.');
         }
       } else {
         try {
@@ -139,7 +156,7 @@ window.addEventListener('DOMContentLoaded', () => {
     fileLinkDiv.style.color = 'green';
     fileLinkDiv.innerHTML = `
       File <strong>${data.originalName}</strong> uploaded successfully.<br>
-      File link (valid for ${data.retentionMinutes} mins): 
+      File link (valid for ${data.retentionMinutes} mins):
       <a id="fileLinkAnchor" href="${data.fileLink}" target="_blank">${data.fileLink}</a>
       <button id="copyButton" data-target="fileLinkAnchor">Copy Link</button>
     `;
