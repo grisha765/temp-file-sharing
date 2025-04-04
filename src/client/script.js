@@ -1,13 +1,20 @@
 window.addEventListener('DOMContentLoaded', () => {
-  const dropZone = document.getElementById('drop-zone');
-  const fileInput = document.getElementById('fileElem');
-  const fileLinkDiv = document.getElementById('file-link');
-  const progressContainer = document.getElementById('progress-container');
-  const uploadProgress = document.getElementById('uploadProgress');
-  const cancelButton = document.getElementById('cancelButton');
+  const dropZone         = document.getElementById('drop-zone');
+  const fileInput        = document.getElementById('fileElem');
+  const progressContainer= document.getElementById('progress-container');
+  const uploadProgress   = document.getElementById('uploadProgress');
+  const cancelButton     = document.getElementById('cancelButton');
+  
+  const uploadCard       = document.getElementById('uploadCard');
+  const fileLinkCard     = document.getElementById('fileLinkCard');
+  const errorCard        = document.getElementById('errorCard');
+  
+  const fileLinkDiv      = document.getElementById('file-link');
+  const errorMessageDiv  = document.getElementById('error-message');
+
   let uploadCompleted = false;
-  let currentXhr = null;
-  let MAX_FILE_SIZE_MB = 10;
+  let currentXhr      = null;
+  let MAX_FILE_SIZE_MB= 10;
 
   function fetchConfig() {
     fetch('/config')
@@ -17,7 +24,6 @@ window.addEventListener('DOMContentLoaded', () => {
       })
       .catch(() => {});
   }
-
   fetchConfig();
 
   function preventDefaults(e) {
@@ -47,6 +53,7 @@ window.addEventListener('DOMContentLoaded', () => {
   dropZone.addEventListener('dragleave', () => {
     if (!uploadCompleted) unhighlight(dropZone);
   });
+
   dropZone.addEventListener('drop', (e) => {
     if (uploadCompleted) return;
     unhighlight(dropZone);
@@ -94,6 +101,9 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 
   function uploadFile(file) {
+    errorCard.classList.add('hidden');
+    errorMessageDiv.textContent = '';
+
     const maxBytes = MAX_FILE_SIZE_MB * 1024 * 1024;
     if (file.size > maxBytes) {
       showError(`File is too large. Max allowed size is ${MAX_FILE_SIZE_MB} MB.`);
@@ -102,6 +112,7 @@ window.addEventListener('DOMContentLoaded', () => {
     progressContainer.classList.remove('hidden');
     uploadProgress.value = 0;
     uploadProgress.textContent = '0%';
+
     const formData = new FormData();
     formData.append('file', file);
 
@@ -157,24 +168,30 @@ window.addEventListener('DOMContentLoaded', () => {
 
   function handleUploadSuccess(data) {
     uploadCompleted = true;
-    progressContainer.classList.add('hidden');
-    if (dropZone) dropZone.remove();
 
-    fileLinkDiv.classList.remove('hidden');
-    fileLinkDiv.style.color = 'green';
+    uploadCard.classList.add('hidden');
+    progressContainer.classList.add('hidden');
+
+    fileLinkCard.classList.remove('hidden');
+
     fileLinkDiv.innerHTML = `
-      File <strong>${data.originalName}</strong> uploaded successfully.<br>
-      File link (valid for ${data.retentionMinutes} mins):
-      <a id="fileLinkAnchor" href="${data.fileLink}" target="_blank">${data.fileLink}</a>
-      <button id="copyButton" data-target="fileLinkAnchor">Copy Link</button>
+      <h2>Upload Successful</h2>
+      <p>File <strong>${data.originalName}</strong> uploaded successfully.</p>
+      <p>File link (valid for ${data.retentionMinutes} mins):<br>
+        <a id="fileLinkAnchor" href="${data.fileLink}" target="_blank">${data.fileLink}</a>
+        <button id="copyButton" class="btn" data-target="fileLinkAnchor">Copy Link</button>
+      </p>
     `;
 
     if (data.textViewLink) {
       fileLinkDiv.innerHTML += `
-        <br>
-        Quick View link:
-        <a id="textViewLinkAnchor" href="${data.textViewLink}" target="_blank">${data.textViewLink}</a>
-        <button id="copyQuickViewButton" data-target="textViewLinkAnchor">Copy Quick View Link</button>
+        <p>
+          Quick View link:<br>
+          <a id="textViewLinkAnchor" href="${data.textViewLink}" target="_blank">${data.textViewLink}</a>
+          <button id="copyQuickViewButton" class="btn" data-target="textViewLinkAnchor">
+            Copy Quick View Link
+          </button>
+        </p>
       `;
     }
 
@@ -195,10 +212,9 @@ window.addEventListener('DOMContentLoaded', () => {
 
   function showError(message, isCancel = false) {
     progressContainer.classList.add('hidden');
-    fileLinkDiv.classList.remove('hidden');
-    fileLinkDiv.style.color = 'red';
-    fileLinkDiv.innerText = message;
-    fileInput.value = '';
+
+    errorCard.classList.remove('hidden');
+    errorMessageDiv.textContent = message;
   }
 
   function copyToClipboardById(elementId, button) {
@@ -207,12 +223,8 @@ window.addEventListener('DOMContentLoaded', () => {
     const textToCopy = targetElement.textContent;
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(textToCopy)
-        .then(() => {
-          showCopySuccess(button);
-        })
-        .catch(() => {
-          fallbackCopyToClipboard(textToCopy, button);
-        });
+        .then(() => showCopySuccess(button))
+        .catch(() => fallbackCopyToClipboard(textToCopy, button));
     } else {
       fallbackCopyToClipboard(textToCopy, button);
     }
