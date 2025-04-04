@@ -17,7 +17,7 @@ window.addEventListener('DOMContentLoaded', () => {
   let MAX_FILE_SIZE_MB= 10;
 
   function fetchConfig() {
-    fetch('/config')
+    fetch('config')
       .then(res => res.json())
       .then(data => {
         MAX_FILE_SIZE_MB = data.maxFileSizeMb;
