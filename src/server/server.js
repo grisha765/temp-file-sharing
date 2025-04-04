@@ -1,27 +1,33 @@
-const express = require('express');
-const multer = require('multer');
+const express    = require('express');
+const multer     = require('multer');
 const { v4: uuidv4 } = require('uuid');
-const fs = require('fs');
-const path = require('path');
-const fsExtra = require('fs-extra');
+const fs         = require('fs');
+const path       = require('path');
+const fsExtra    = require('fs-extra');
+
+const {
+  PORT,
+  UPLOAD_FOLDER,
+  RETENTION_TIME,
+  FILE_RETENTION,
+  UPLOAD_LIMIT,
+  UPLOAD_WINDOW,
+  BLOCK_DURATION,
+  FILE_SIZE_LIMIT,
+  PUBLIC_DOMAIN
+} = require('../config/variables');
 
 const app = express();
 app.set('trust proxy', true);
 
-const PORT = process.env.PORT || 3000;
-const UPLOAD_FOLDER = '/tmp/temp-files';
+let serverInstance;
+
+const uploadTracker = {};
+const fileStore     = {};
+
 if (!fs.existsSync(UPLOAD_FOLDER)) {
   fs.mkdirSync(UPLOAD_FOLDER, { recursive: true });
 }
-
-const retentionMinutes = process.env.FILE_RETENTION ? parseInt(process.env.FILE_RETENTION, 10) : 30;
-const retentionTime = retentionMinutes * 60 * 1000;
-const uploadTracker = {};
-const uploadLimit = process.env.UPLOAD_LIMIT ? parseInt(process.env.UPLOAD_LIMIT, 10) : 5;
-const uploadWindow = 5 * 60 * 1000;
-const blockDuration = 5 * 60 * 1000;
-
-const fileSizeLimitMb = process.env.FILE_SIZE_LIMIT ? parseInt(process.env.FILE_SIZE_LIMIT, 10) : 10;
 
 function checkAndUpdateUploadTracker(ip) {
   const now = Date.now();
@@ -34,17 +40,28 @@ function checkAndUpdateUploadTracker(ip) {
   if (tracker.blockUntil && now < tracker.blockUntil) {
     return tracker;
   }
-  if (now - tracker.firstUploadTime > uploadWindow) {
+  if (now - tracker.firstUploadTime > UPLOAD_WINDOW) {
     tracker.count = 1;
     tracker.firstUploadTime = now;
     tracker.blockUntil = 0;
   } else {
     tracker.count += 1;
-    if (tracker.count > uploadLimit) {
-      tracker.blockUntil = now + blockDuration;
+    if (tracker.count > UPLOAD_LIMIT) {
+      tracker.blockUntil = now + BLOCK_DURATION;
     }
   }
   return tracker;
+}
+
+function cleanupFile(fileId) {
+  const fileRecord = fileStore[fileId];
+  if (fileRecord) {
+    clearTimeout(fileRecord.timeoutHandle);
+    fsExtra.remove(fileRecord.path)
+      .then(() => console.log(`[${new Date().toISOString()}] Deleted file: ${fileRecord.path}`))
+      .catch((err) => console.error(`Error deleting file ${fileRecord.path}:`, err));
+    delete fileStore[fileId];
+  }
 }
 
 const storage = multer.diskStorage({
@@ -55,48 +72,54 @@ const storage = multer.diskStorage({
     cb(null, Date.now() + '-' + file.originalname);
   },
 });
-
 const upload = multer({ storage });
-const fileStore = {};
 
 app.get('/config', (req, res) => {
-  res.json({ maxFileSizeMb: fileSizeLimitMb });
+  res.json({ maxFileSizeMb: FILE_SIZE_LIMIT });
 });
 
 app.post('/upload', (req, res) => {
   const ip = req.headers['x-real-ip'] || req.ip;
   const tracker = checkAndUpdateUploadTracker(ip);
+
   if (tracker.blockUntil && Date.now() < tracker.blockUntil) {
     const waitTime = Math.ceil((tracker.blockUntil - Date.now()) / 60000);
     return res.status(429).json({ error: `Too many uploads. Please try again in ${waitTime} minute(s).` });
   }
+
   upload.single('file')(req, res, (err) => {
     if (err) {
       console.error(`[${new Date().toISOString()}] Upload error:`, err);
       return res.status(500).json({ error: 'An error occurred during file upload.' });
     }
-    const fileId = uuidv4();
-    const filePath = req.file.path;
-    const originalName = req.file.originalname;
-    const mimeType = req.file.mimetype;
+    const fileId      = uuidv4();
+    const filePath    = req.file.path;
+    const originalName= req.file.originalname;
+    const mimeType    = req.file.mimetype;
+
     const deleteTimeout = setTimeout(() => {
       cleanupFile(fileId);
-    }, retentionTime);
+    }, RETENTION_TIME);
+
     fileStore[fileId] = {
       path: filePath,
       timeoutHandle: deleteTimeout,
       mimeType
     };
-    console.log(`[${new Date().toISOString()}] File uploaded: ${originalName} (ID: ${fileId}), stored at ${filePath}. Client IP: ${ip}. Retention: ${retentionMinutes} minute(s).`);
-    const host = process.env.PUBLIC_DOMAIN || req.get('host');
+
+    console.log(`[${new Date().toISOString()}] File uploaded: ${originalName} (ID: ${fileId}), stored at ${filePath}. Client IP: ${ip}. Retention: ${FILE_RETENTION} minute(s).`);
+    
+    const host = PUBLIC_DOMAIN || req.get('host');
     const prefix = req.get('X-Forwarded-Prefix') || '';
     const fileLink = `${req.protocol}://${host}${prefix}/file/${fileId}`;
+
     const isTextFile = mimeType.startsWith('text/');
     const textViewLink = isTextFile ? `${req.protocol}://${host}${prefix}/text/${fileId}` : null;
-    res.json({
+
+    return res.json({
       fileLink,
       originalName,
-      retentionMinutes,
+      retentionMinutes: FILE_RETENTION,
       ...(textViewLink ? { textViewLink } : {})
     });
   });
@@ -134,21 +157,13 @@ app.get('/text/:id', (req, res) => {
   });
 });
 
-function cleanupFile(fileId) {
-  const fileRecord = fileStore[fileId];
-  if (fileRecord) {
-    clearTimeout(fileRecord.timeoutHandle);
-    fsExtra.remove(fileRecord.path)
-      .then(() => console.log(`[${new Date().toISOString()}] Deleted file: ${fileRecord.path}`))
-      .catch((err) => console.error(`Error deleting file ${fileRecord.path}:`, err));
-    delete fileStore[fileId];
-  }
-}
+app.use(express.static(path.join(__dirname, '../client')));
 
-app.use(express.static(path.join(__dirname, 'public')));
-const serverInstance = app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+async function start() {
+  serverInstance = app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
 
 async function cleanupFolder() {
   try {
@@ -159,14 +174,20 @@ async function cleanupFolder() {
   }
 }
 
-function shutdown() {
+async function shutdown() {
   console.log('Terminating server...');
-  serverInstance.close(async () => {
-    await cleanupFolder();
+  if (serverInstance) {
+    serverInstance.close(async () => {
+      await cleanupFolder();
+      process.exit(0);
+    });
+  } else {
     process.exit(0);
-  });
+  }
 }
 
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+module.exports = {
+  start,
+  shutdown
+};
 

@@ -104,8 +104,10 @@ window.addEventListener('DOMContentLoaded', () => {
     uploadProgress.textContent = '0%';
     const formData = new FormData();
     formData.append('file', file);
+
     const xhr = new XMLHttpRequest();
     currentXhr = xhr;
+
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) {
         const percentComplete = (e.loaded / e.total) * 100;
@@ -113,6 +115,7 @@ window.addEventListener('DOMContentLoaded', () => {
         uploadProgress.textContent = `${Math.floor(percentComplete)}%`;
       }
     };
+
     xhr.onload = () => {
       if (xhr.status === 200) {
         try {
@@ -131,16 +134,20 @@ window.addEventListener('DOMContentLoaded', () => {
       }
       currentXhr = null;
     };
+
     xhr.onerror = () => {
       showError('Network error occurred during upload.');
       currentXhr = null;
     };
+
     xhr.onabort = () => {
       showError('Upload canceled by user.', true);
       currentXhr = null;
     };
+
     xhr.open('POST', 'upload');
     xhr.send(formData);
+
     cancelButton.onclick = () => {
       if (currentXhr) {
         currentXhr.abort();
@@ -152,6 +159,7 @@ window.addEventListener('DOMContentLoaded', () => {
     uploadCompleted = true;
     progressContainer.classList.add('hidden');
     if (dropZone) dropZone.remove();
+
     fileLinkDiv.classList.remove('hidden');
     fileLinkDiv.style.color = 'green';
     fileLinkDiv.innerHTML = `
@@ -160,6 +168,7 @@ window.addEventListener('DOMContentLoaded', () => {
       <a id="fileLinkAnchor" href="${data.fileLink}" target="_blank">${data.fileLink}</a>
       <button id="copyButton" data-target="fileLinkAnchor">Copy Link</button>
     `;
+
     if (data.textViewLink) {
       fileLinkDiv.innerHTML += `
         <br>
@@ -168,11 +177,13 @@ window.addEventListener('DOMContentLoaded', () => {
         <button id="copyQuickViewButton" data-target="textViewLinkAnchor">Copy Quick View Link</button>
       `;
     }
+
     const copyButton = document.getElementById("copyButton");
     copyButton.addEventListener("click", () => {
       const targetId = copyButton.getAttribute("data-target");
       copyToClipboardById(targetId, copyButton);
     });
+
     const copyQuickViewButton = document.getElementById("copyQuickViewButton");
     if (copyQuickViewButton) {
       copyQuickViewButton.addEventListener("click", () => {
