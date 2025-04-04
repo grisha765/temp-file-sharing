@@ -10,6 +10,12 @@
   <h1>Temporary File Sharing</h1>
   <div id="drop-zone">Drop files here or paste from clipboard</div>
   <input type="file" id="fileElem" style="display:none;" />
+  
+  <div id="progress-container" class="hidden">
+    <progress id="uploadProgress" value="0" max="100">0%</progress>
+    <button id="cancelButton">Cancel Upload</button>
+  </div>
+
   <div id="file-link" class="hidden"></div>
   <script src="script.js"></script>
     <footer>

@@ -2,7 +2,13 @@ window.addEventListener('DOMContentLoaded', () => {
   const dropZone = document.getElementById('drop-zone');
   const fileInput = document.getElementById('fileElem');
   const fileLinkDiv = document.getElementById('file-link');
+  
+  const progressContainer = document.getElementById('progress-container');
+  const uploadProgress = document.getElementById('uploadProgress');
+  const cancelButton = document.getElementById('cancelButton');
+
   let uploadCompleted = false;
+  let currentXhr = null;
 
   function preventDefaults(e) {
     e.preventDefault();
@@ -71,67 +77,111 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  async function uploadFile(file) {
+  function uploadFile(file) {
+    progressContainer.classList.remove('hidden');
+    uploadProgress.value = 0;
+    uploadProgress.textContent = '0%';
+
     const formData = new FormData();
     formData.append('file', file);
 
-    try {
-      const response = await fetch('upload', {
-        method: 'POST',
-        body: formData
-      });
+    const xhr = new XMLHttpRequest();
+    currentXhr = xhr;
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Upload failed with status ${response.status}`);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        const percentComplete = (e.loaded / e.total) * 100;
+        uploadProgress.value = percentComplete;
+        uploadProgress.textContent = `${Math.floor(percentComplete)}%`;
       }
+    };
 
-      const data = await response.json();
-      uploadCompleted = true;
-
-      const dropZone = document.getElementById('drop-zone');
-      if (dropZone) {
-        dropZone.remove();
+    xhr.onload = async () => {
+      if (xhr.status === 200) {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          handleUploadSuccess(data);
+        } catch (parseError) {
+          console.error('Could not parse server response:', parseError);
+          showError('Upload completed, but server response invalid.');
+        }
+      } else {
+        try {
+          const errorData = JSON.parse(xhr.responseText);
+          showError(errorData.error || `Upload failed with status ${xhr.status}`);
+        } catch {
+          showError(`Upload failed with status ${xhr.status}`);
+        }
       }
+      currentXhr = null;
+    };
 
-      fileLinkDiv.classList.remove('hidden');
-      fileLinkDiv.style.color = 'green';
-      
-      fileLinkDiv.innerHTML = `
-        File <strong>${data.originalName}</strong> uploaded successfully.<br>
-        File link (valid for ${data.retentionMinutes} mins): 
-        <a id="fileLinkAnchor" href="${data.fileLink}" target="_blank">${data.fileLink}</a>
-        <button id="copyButton" data-target="fileLinkAnchor">Copy Link</button>
+    xhr.onerror = () => {
+      console.error('Network error or CORS issue.');
+      showError('Network error occurred during upload.');
+      currentXhr = null;
+    };
+
+    xhr.onabort = () => {
+      showError('Upload canceled by user.', true);
+      currentXhr = null;
+    };
+
+    xhr.open('POST', '/upload');
+    xhr.send(formData);
+
+    cancelButton.onclick = () => {
+      if (currentXhr) {
+        currentXhr.abort();
+      }
+    };
+  }
+
+  function handleUploadSuccess(data) {
+    uploadCompleted = true;
+    progressContainer.classList.add('hidden');
+    if (dropZone) dropZone.remove();
+
+    fileLinkDiv.classList.remove('hidden');
+    fileLinkDiv.style.color = 'green';
+    fileLinkDiv.innerHTML = `
+      File <strong>${data.originalName}</strong> uploaded successfully.<br>
+      File link (valid for ${data.retentionMinutes} mins): 
+      <a id="fileLinkAnchor" href="${data.fileLink}" target="_blank">${data.fileLink}</a>
+      <button id="copyButton" data-target="fileLinkAnchor">Copy Link</button>
+    `;
+    if (data.textViewLink) {
+      fileLinkDiv.innerHTML += `
+        <br>
+        Quick View link:
+        <a id="textViewLinkAnchor" href="${data.textViewLink}" target="_blank">${data.textViewLink}</a>
+        <button id="copyQuickViewButton" data-target="textViewLinkAnchor">Copy Quick View Link</button>
       `;
+    }
 
-      if (data.textViewLink) {
-        fileLinkDiv.innerHTML += `
-          <br>
-          Quick View link:
-          <a id="textViewLinkAnchor" href="${data.textViewLink}" target="_blank">${data.textViewLink}</a>
-          <button id="copyQuickViewButton" data-target="textViewLinkAnchor">Copy Quick View Link</button>
-        `;
-      }
+    const copyButton = document.getElementById("copyButton");
+    copyButton.addEventListener("click", () => {
+      const targetId = copyButton.getAttribute("data-target");
+      copyToClipboardById(targetId, copyButton);
+    });
 
-      const copyButton = document.getElementById("copyButton");
-      copyButton.addEventListener("click", () => {
-        const targetId = copyButton.getAttribute("data-target");
-        copyToClipboardById(targetId, copyButton);
+    const copyQuickViewButton = document.getElementById("copyQuickViewButton");
+    if (copyQuickViewButton) {
+      copyQuickViewButton.addEventListener("click", () => {
+        const targetId = copyQuickViewButton.getAttribute("data-target");
+        copyToClipboardById(targetId, copyQuickViewButton);
       });
+    }
+  }
 
-      const copyQuickViewButton = document.getElementById("copyQuickViewButton");
-      if (copyQuickViewButton) {
-        copyQuickViewButton.addEventListener("click", () => {
-          const targetId = copyQuickViewButton.getAttribute("data-target");
-          copyToClipboardById(targetId, copyQuickViewButton);
-        });
-      }
+  function showError(message, isCancel = false) {
+    progressContainer.classList.add('hidden');
+    fileLinkDiv.classList.remove('hidden');
+    fileLinkDiv.style.color = 'red';
+    fileLinkDiv.innerText = message;
 
-    } catch (error) {
-      console.error('Error uploading file:', error);
-      fileLinkDiv.classList.remove('hidden');
-      fileLinkDiv.style.color = 'red';
-      fileLinkDiv.innerText = error.message || 'Error uploading file';
+    if (!isCancel) {
+      uploadCompleted = true;
     }
   }
 
