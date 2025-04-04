@@ -9,7 +9,6 @@ const app = express();
 app.set('trust proxy', true);
 
 const PORT = process.env.PORT || 3000;
-
 const UPLOAD_FOLDER = '/tmp/temp-files';
 if (!fs.existsSync(UPLOAD_FOLDER)) {
   fs.mkdirSync(UPLOAD_FOLDER, { recursive: true });
@@ -17,10 +16,6 @@ if (!fs.existsSync(UPLOAD_FOLDER)) {
 
 const retentionMinutes = process.env.FILE_RETENTION ? parseInt(process.env.FILE_RETENTION, 10) : 30;
 const retentionTime = retentionMinutes * 60 * 1000;
-
-const fileSizeLimitMb = process.env.FILE_SIZE_LIMIT ? parseInt(process.env.FILE_SIZE_LIMIT, 10) : 10;
-const fileSizeLimitBytes = fileSizeLimitMb * 1024 * 1024;
-
 const uploadTracker = {};
 const uploadLimit = process.env.UPLOAD_LIMIT ? parseInt(process.env.UPLOAD_LIMIT, 10) : 5;
 const uploadWindow = 5 * 60 * 1000;
@@ -58,11 +53,8 @@ const storage = multer.diskStorage({
     cb(null, Date.now() + '-' + file.originalname);
   },
 });
-const upload = multer({ 
-  storage, 
-  limits: { fileSize: fileSizeLimitBytes } 
-});
 
+const upload = multer({ storage });
 const fileStore = {};
 
 app.post('/upload', (req, res) => {
@@ -70,51 +62,31 @@ app.post('/upload', (req, res) => {
   const tracker = checkAndUpdateUploadTracker(ip);
   if (tracker.blockUntil && Date.now() < tracker.blockUntil) {
     const waitTime = Math.ceil((tracker.blockUntil - Date.now()) / 60000);
-    console.log(`[${new Date().toISOString()}] Blocking upload from IP ${ip} for ${waitTime} minute(s) due to spam.`);
     return res.status(429).json({ error: `Too many uploads. Please try again in ${waitTime} minute(s).` });
   }
-
   upload.single('file')(req, res, (err) => {
     if (err) {
-      if (err.code === 'LIMIT_FILE_SIZE') {
-        console.error(`[${new Date().toISOString()}] Upload error: File exceeds ${fileSizeLimitMb} MB limit.`);
-        return res.status(413).json({
-          error: `Uploaded file exceeds the allowed file size of ${fileSizeLimitMb} MB.`
-        });
-      }
       console.error(`[${new Date().toISOString()}] Upload error:`, err);
       return res.status(500).json({ error: 'An error occurred during file upload.' });
     }
-
     const fileId = uuidv4();
     const filePath = req.file.path;
     const originalName = req.file.originalname;
     const mimeType = req.file.mimetype;
-
     const deleteTimeout = setTimeout(() => {
       cleanupFile(fileId);
     }, retentionTime);
-
     fileStore[fileId] = {
       path: filePath,
       timeoutHandle: deleteTimeout,
       mimeType
     };
-
-    console.log(
-      `[${new Date().toISOString()}] File uploaded: ${originalName} (ID: ${fileId}), stored at ${filePath}. ` +
-      `Client IP: ${ip}. Retention: ${retentionMinutes} minute(s).`
-    );
-
+    console.log(`[${new Date().toISOString()}] File uploaded: ${originalName} (ID: ${fileId}), stored at ${filePath}. Client IP: ${ip}. Retention: ${retentionMinutes} minute(s).`);
     const host = process.env.PUBLIC_DOMAIN || req.get('host');
     const prefix = req.get('X-Forwarded-Prefix') || '';
     const fileLink = `${req.protocol}://${host}${prefix}/file/${fileId}`;
-
     const isTextFile = mimeType.startsWith('text/');
-    const textViewLink = isTextFile
-      ? `${req.protocol}://${host}${prefix}/text/${fileId}`
-      : null;
-
+    const textViewLink = isTextFile ? `${req.protocol}://${host}${prefix}/text/${fileId}` : null;
     res.json({
       fileLink,
       originalName,
@@ -140,15 +112,12 @@ app.get('/file/:id', (req, res) => {
 app.get('/text/:id', (req, res) => {
   const { id } = req.params;
   const fileRecord = fileStore[id];
-
   if (!fileRecord) {
     return res.status(404).send('File not found or it may have expired.');
   }
-
   if (!fileRecord.mimeType || !fileRecord.mimeType.startsWith('text/')) {
     return res.status(415).send('Not a text file or viewing as text is not supported.');
   }
-
   fs.readFile(fileRecord.path, 'utf8', (err, data) => {
     if (err) {
       console.error('Error reading file:', err);
@@ -171,10 +140,9 @@ function cleanupFile(fileId) {
 }
 
 app.use(express.static(path.join(__dirname, 'public')));
-
 const serverInstance = app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
-  console.log(`File retention time: ${retentionMinutes} minute(s), File size limit: ${fileSizeLimitMb} MB, Upload limit: ${uploadLimit} per 5 minutes.`);
+  console.log(`File retention time: ${retentionMinutes} minute(s), Upload limit: ${uploadLimit} per 5 minutes.`);
 });
 
 async function cleanupFolder() {
@@ -186,13 +154,13 @@ async function cleanupFolder() {
   }
 }
 
-const shutdown = () => {
+function shutdown() {
   console.log('Terminating server, cleaning up temporary files...');
   serverInstance.close(async () => {
     await cleanupFolder();
     process.exit(0);
   });
-};
+}
 
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);

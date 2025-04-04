@@ -2,11 +2,10 @@ window.addEventListener('DOMContentLoaded', () => {
   const dropZone = document.getElementById('drop-zone');
   const fileInput = document.getElementById('fileElem');
   const fileLinkDiv = document.getElementById('file-link');
-  
   const progressContainer = document.getElementById('progress-container');
   const uploadProgress = document.getElementById('uploadProgress');
   const cancelButton = document.getElementById('cancelButton');
-
+  const MAX_FILE_SIZE_MB = 10;
   let uploadCompleted = false;
   let currentXhr = null;
 
@@ -78,16 +77,18 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 
   function uploadFile(file) {
+    const maxBytes = MAX_FILE_SIZE_MB * 1024 * 1024;
+    if (file.size > maxBytes) {
+      showError(`File is too large. Max allowed size is ${MAX_FILE_SIZE_MB} MB.`);
+      return;
+    }
     progressContainer.classList.remove('hidden');
     uploadProgress.value = 0;
     uploadProgress.textContent = '0%';
-
     const formData = new FormData();
     formData.append('file', file);
-
     const xhr = new XMLHttpRequest();
     currentXhr = xhr;
-
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) {
         const percentComplete = (e.loaded / e.total) * 100;
@@ -95,14 +96,12 @@ window.addEventListener('DOMContentLoaded', () => {
         uploadProgress.textContent = `${Math.floor(percentComplete)}%`;
       }
     };
-
     xhr.onload = async () => {
       if (xhr.status === 200) {
         try {
           const data = JSON.parse(xhr.responseText);
           handleUploadSuccess(data);
-        } catch (parseError) {
-          console.error('Could not parse server response:', parseError);
+        } catch {
           showError('Upload completed, but server response invalid.');
         }
       } else {
@@ -115,21 +114,16 @@ window.addEventListener('DOMContentLoaded', () => {
       }
       currentXhr = null;
     };
-
     xhr.onerror = () => {
-      console.error('Network error or CORS issue.');
       showError('Network error occurred during upload.');
       currentXhr = null;
     };
-
     xhr.onabort = () => {
       showError('Upload canceled by user.', true);
       currentXhr = null;
     };
-
     xhr.open('POST', '/upload');
     xhr.send(formData);
-
     cancelButton.onclick = () => {
       if (currentXhr) {
         currentXhr.abort();
@@ -141,7 +135,6 @@ window.addEventListener('DOMContentLoaded', () => {
     uploadCompleted = true;
     progressContainer.classList.add('hidden');
     if (dropZone) dropZone.remove();
-
     fileLinkDiv.classList.remove('hidden');
     fileLinkDiv.style.color = 'green';
     fileLinkDiv.innerHTML = `
@@ -158,13 +151,11 @@ window.addEventListener('DOMContentLoaded', () => {
         <button id="copyQuickViewButton" data-target="textViewLinkAnchor">Copy Quick View Link</button>
       `;
     }
-
     const copyButton = document.getElementById("copyButton");
     copyButton.addEventListener("click", () => {
       const targetId = copyButton.getAttribute("data-target");
       copyToClipboardById(targetId, copyButton);
     });
-
     const copyQuickViewButton = document.getElementById("copyQuickViewButton");
     if (copyQuickViewButton) {
       copyQuickViewButton.addEventListener("click", () => {
@@ -179,7 +170,6 @@ window.addEventListener('DOMContentLoaded', () => {
     fileLinkDiv.classList.remove('hidden');
     fileLinkDiv.style.color = 'red';
     fileLinkDiv.innerText = message;
-
     if (!isCancel) {
       uploadCompleted = true;
     }
@@ -188,15 +178,13 @@ window.addEventListener('DOMContentLoaded', () => {
   function copyToClipboardById(elementId, button) {
     const targetElement = document.getElementById(elementId);
     if (!targetElement) return;
-
     const textToCopy = targetElement.textContent;
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(textToCopy)
         .then(() => {
           showCopySuccess(button);
         })
-        .catch(err => {
-          console.error("Failed to copy using Clipboard API:", err);
+        .catch(() => {
           fallbackCopyToClipboard(textToCopy, button);
         });
     } else {
@@ -217,22 +205,18 @@ window.addEventListener('DOMContentLoaded', () => {
     document.body.appendChild(textarea);
     textarea.focus();
     textarea.select();
-
     try {
       const successful = document.execCommand("copy");
       if (successful) {
         showCopySuccess(button);
       } else {
-        console.error("Fallback: Copy command was unsuccessful");
         button.textContent = "Error!";
         setTimeout(() => (button.textContent = "Copy Link"), 2000);
       }
-    } catch (err) {
-      console.error("Fallback: Unable to copy", err);
+    } catch {
       button.textContent = "Error!";
       setTimeout(() => (button.textContent = "Copy Link"), 2000);
     }
-
     document.body.removeChild(textarea);
   }
 });
