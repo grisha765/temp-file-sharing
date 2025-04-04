@@ -139,7 +139,7 @@ window.addEventListener('DOMContentLoaded', () => {
       showError('Upload canceled by user.', true);
       currentXhr = null;
     };
-    xhr.open('POST', '/upload');
+    xhr.open('POST', 'upload');
     xhr.send(formData);
     cancelButton.onclick = () => {
       if (currentXhr) {
