@@ -187,9 +187,7 @@ window.addEventListener('DOMContentLoaded', () => {
     fileLinkDiv.classList.remove('hidden');
     fileLinkDiv.style.color = 'red';
     fileLinkDiv.innerText = message;
-    if (!isCancel) {
-      uploadCompleted = true;
-    }
+    fileInput.value = '';
   }
 
   function copyToClipboardById(elementId, button) {
